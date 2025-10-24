@@ -1,0 +1,551 @@
+; Titulación: Grado en Informática. Plan 2009.
+; Materia:    Estructura de Computadores.
+; Archivo:    CDV24
+; ----------------------------------------------------------------------
+; Macros
+LEA: MACRO (reg, ETIQ)
+	 or reg, r0, low(ETIQ)
+	 or.u reg, reg, high(ETIQ)
+	 ENDMACRO	 
+	 
+LOAD: MACRO (reg, ETIQ)
+	  LEA (reg, ETIQ)
+	  ld reg, reg, r0
+	  ENDMACRO
+	  
+PUSH: MACRO (ra)
+	  subu r30, r30, 4
+	  st ra, r30, r0
+	  ENDMACRO
+
+POP: MACRO(ra)
+	 ld ra, r30, 0
+	 addu r30, r30, 4
+	 ENDMACRO	 
+
+;MACROS ADICIONALES
+;Funcionamiento
+;incrementa dos registros en 1 unidad
+;	 
+INC2: MACRO (ra, rb)
+		addu ra,ra,1
+		addu rb, rb, 1
+		ENDMACRO
+;Funcionamiento
+;crea la pila
+;				
+iniPila: MACRO()
+        PUSH(r1)
+        PUSH(r31)
+        or r31,r30,r30
+		ENDMACRO
+;Funcionamiento
+;destruye la pila
+;
+finPila: MACRO()
+        or r30,r31,r31
+        POP(r31)
+        POP(r1)
+		ENDMACRO
+;Funcionamiento
+;deja en 0 a dos registros
+;		
+reset2: MACRO(ra,rb)
+		or ra,r0,0
+		or rb,r0,0
+		ENDMACRO
+
+org 0x8000
+;DATOS
+
+textobuscacar: data 0x40302010, 0x80706050, 0x00A090
+
+char: data"o";
+
+CAD1: data "Estoesun1ejemplo\0";
+CAD2: data "Estoesunejemplo\0";
+
+textocomprime:	data "tres tristes tigres comen trigo en un trigal\0"
+textocomprime2:	data "a cuesta le cuesta subir la cuesta, y en medio de la cuesta, va y...\0"
+
+
+textodescomprime:data 0x0b010044, 0x10102400, 0x74004000, 0x20736572
+data 0x73697274, 0x04000274, 0x00016769, 0x6d6f6304
+data 0x00046e65, 0x206f6704, 0x75206e65, 0x61060018
+data 0x65202c6c, 0x7270206c, 0x72656d69, 0x2006000c
+data 0x2e657571, 0x00002e2e, 0x00
+
+
+;SUBRUTINAS
+LongCad:
+		ld r20,r30,0  	 	;	Cojo la cadena de la pila
+		or r29,r0,0		 	;	Limpia r29 a 0
+blgcd:	ld.bu r2,r20,0   	;	Coge el primero de la cadena
+		cmp r7,r2,0 	 	;	Hacer la comparicion si es 0x00
+		bb1 eq,r7,flgcd  	;	Si es 0 salta a flgcd
+		;addu r29,r29,1   	;	Aumento  r29(cont)
+		;addu r20,r20,1   	;	r20 avanza
+		INC2(r29,r20)
+		br blgcd		
+flgcd:	jmp(r1)
+
+
+BuscaCar: 
+		ld r20,r30,0 		;	carga  C caracter
+		ld r21,r30,4 		;	carga REF cadena
+		ld r22,r30,8 		;	carga FROM  inicio
+		ld r23,r30,12 		;	cargar TO final
+		or r29,r0,0			;	Inicializa r29
+bbsc:	ld.bu r2,r21,r22 	;	carga primer caracter marcado por inicio
+		cmp r7,r22,r23		;	FROM=TO?
+		bb1 eq,r7,fbsc		;	si->final
+		cmp r7,r2,r20		;	He encontrado C
+		bb1 eq,r7,fbsc		;	si->termino
+		addu r22,r22,1		;	Sig car de cadena, FROM++
+		br bbsc
+fbsc:	or r29,r22,0		;	Meto el FROM que ha sido recorrido a r29
+		jmp(r1)
+		
+		
+
+CoincidenCad: 
+		ld r20,r30,0		; CADENA1
+		ld r21,r30,4		; CADENA2
+		or r29,r0,0 		;	Inicializa r29 a 0
+bccd:	ld.bu r2,r20,0		;	primero de CADENA1
+		ld.bu r3,r21,0		;	primero de CADENA2
+		cmp r4,r2,0			;	c de CADENA1 es null
+		bb1 eq,r4,fccd
+		cmp r5,r3,0
+		bb1 eq,r5,fccd
+		cmp r6,r2,r3 		;	c de CADENA2 es null
+		bb1 ne,r6,fccd		;	veo si son distintos, si lo son voy a fccd, r29-> 0
+		;addu r20,r20,1
+		INC2(r20,r21)
+		;addu r21,r21,1
+		addu r29,r29,1
+		br bccd	
+fccd:	jmp(r1)	
+
+Comprime:     iniPila()				;	MACRO inicio pila
+              ld r2,r30,8  			;	dir del txt->r2
+			  ld r3,r30,12  		;	dir de cmprd->r3
+              PUSH(r2)				;			|
+              bsr LongCad			;		|Llamada a LongCad
+              POP(r2)				;			|
+              
+              or r14,r29,0 			;	salvaguardo long del texto->r14
+
+exc4:         divu r22,r29,4 		;	r29/4->r22
+              mulu r23,r22,4  		;	22*4->r23
+              cmp r5,r29,r23   		;	(r23==r29)? Voy a save|No, r29++*******
+              bb1 eq,r5,save 		;	salto a save
+              addu r29,r29,1 		;	inc r29
+			  br exc4
+			  
+save: 		  addu r29,r29,28		; 	Reserva para variables locales->[r29]+28
+              subu r30,r30,r29      ;	Reserva de espacio para variables locales
+              st r29,r31,-28        ; 	Guardo la long del texto->r31-28
+			  
+              ;or r10,r0,r0   		;	cont txt
+              ;or r11,r0,r0    		;	cont cmprd 
+			  reset2(r10,r11)		;	reset2
+              or r24,r0,5     		;	ptr mapa de bits
+		      or r25,r0,39     		;	aux para bits
+			  
+			  st.b r0,r3,r24    	;	0 en el sig bit del mapa
+			  
+respri8:     ld.bu r6,r2,r10   		;	Cargar caracter del txt parametro
+              st.b r6,r30,r11   	;	Copiar caracterl en cmprd
+              INC2(r10,r11)			;	inc
+              cmp r5,r10,8       	;	(r10=8)?si,avanza|no,vuelve
+              bb0 eq,r5,respri8  
+			  
+comp5:  	  cmp r5,r25,31         ;	termina el byte
+              bb0 eq,r5,comp5buc    ;	si no es sigue a buc
+              addu r25,r0,39        ;	reset de aux de bits
+			  addu r24,r24,1        ;	inc r24
+              st.b r0,r3,r24        ;	0 en cmprd
+              
+comp5buc:
+              st r14,r31,-24		;	salvaguardo long texto
+              st r25,r31,-20		;	salvaguardo auxbits
+              st r24,r31,-16		;	salvaguardo ptr mapa bits
+              st r11,r31,-12		;	salvaguardo cont cmprd
+              st r3,r31,-8			;	salvaguardo dir cmprd
+              subu r16,r31,4        ;	param para BuscaMax
+			  
+              PUSH(r16)				;			|
+              PUSH(r10)				;			|
+              PUSH(r2)				;			|
+              bsr BuscaMax			;		|Llamada a BuscaMax
+              POP(r2)				;			|
+              POP(r10)				;			|
+              POP(r16)				;			|
+			  
+              ld r3,r31,-8			;	salvaguardo dir cmprd
+              ld r11,r31,-12		;	salvaguardo cont cmprd
+              ld r24,r31,-16		;	salvaguardo ptr mapa bits
+              ld r25,r31,-20		;	salvaguardo auxbits
+              ld r14,r31,-24		;	salvaguardo long texto
+			  
+			  addu r15,r29,0		;	r29 de buscamax->r15
+              cmp r5,r29,4			;	si buscamax es 4
+              ;bb0 hs,r5,comp5B 	;	si no es 5b
+              bb1 hs,r5,comp5C 		;	si es 5c
+ 
+comp5B: 	  ld.bu r8,r2,r10   	;	r2+r10->r8
+              st.b r8,r30,r11   	;	guarda r8 en pila
+			  INC2(r10,r11)			;	inc
+              ld.bu r9,r3,r24  		;	r9 en cmprd
+              clr r9,r9,r25    		;	r9->bits a 0
+              st.b r9,r3,r24   		;	guarda r9 en cmprd
+              br comp6
+			  
+comp5C:	      ld r16,r16,0      	;	0->r16
+              st.b r16,r30,r11   	;	r16->r30+r11
+              addu r11,r11,1      	;	inc r11
+              extu r16,r16,0<8> 	;	extiende valor
+              st.b r16,r30,r11   	;	r16->r30+r11
+              addu r11,r11,1      	;	inc r11
+              st.b r29,r30,r11   	;	r30+r11<-r29
+              addu r11,r11,1      	;	r11<-r11+1
+              addu r10,r10,r15    	;	r10+r15->r10
+              ld.bu r9,r3,r24  		;	r9->r3+r24
+              set r9,r9,r25    		;	r9->1 en bits
+              st.b r9,r3,r24   		;	r9->r3+r24
+              br comp6
+			  
+comp6:		  subu r25,r25,1        ;	dec r25
+              ld r8,r31,-24         ; 	guarda r14 en pila
+              cmp r5,r8,r10         ; 	(r14==r10)?si|no
+              bb1 eq,r5,comp7  		;	si es igual a r10
+              cmp r5,r25,31          
+              bb0 eq,r5,comp5  		;	(r25==31)?si|no 
+              addu r24,r24,1        ;	inc r24
+              st.b r0,r3,r24        ;	0->r3+r24
+              addu r25,r0,39        ;	reset r25
+              br comp5      
+			  
+comp7:	      or r27,r0,0         	;	0->r27
+			  or r28,r0,1         	;	1->r28
+			  addu r24,r24,1        ;	inc r24
+			  addu r26,r24,0        ; 	r24->r26
+              addu r29,r24,r11      ;	r24+r11->r29
+              
+              
+              st.b r8,r3,r27        ;	r8->r3+r27
+              addu r27,r27,1        ;	inc r27
+              extu r8,r8,0<8>       ;	desp en r8
+              st.b r8,r3,r27        ;	guarda bit
+              addu r27,r27,1        ;	inc r27
+             
+			  
+              st.b r28,r3,r27       ;	r3+2<-1
+              addu r27,r27,1        ;	inc r27
+			  
+              st.b r24,r3,r27       ;	r3+3<-puntero
+              addu r27,r27,1        ;	inc r27
+			  
+              extu r24,r24,0<8>     ;	extiende valor
+              st.b r24,r3,r27       ; 	r28->r3+r27
+              addu r27,r26,0        ; 	r26->r27
+              or r28,r0,0         	;	reset r28
+			  
+fincom:  	  ld.bu r8,r30,r28      ;	r8->r30+r28
+              st.b r8,r3,r27        ;	r8->r3+r27
+              INC2(r27,r28)			;	inc
+              cmp r5,r11,r28        ;	(r11==r28)?si|no
+              bb0 eq,r5,fincom   	;	si no es igual vuelve
+              st.b r0,r3,r27        ;	r3+r27<-0
+              ld r6,r31,-28         ;	guarda r6 en pila
+              ;add r30,r30,r6       ;	deshace pila
+              finPila()
+              jmp(r1)
+
+
+Descomprime:  iniPila()         	;	MACRO inicio Pila
+              ld r2,r30,8       	;	dir cmprd
+              ld r3,r30,12      	;	dir descmprd
+
+			  reset2(r10,r11)		;	reset
+              or r24,r0,5       	;	cont mapa
+			  or r25,r0,31			;	aux 
+			  
+              ld.bu r16,r2,r10  	;	longitud texto
+              addu r10,r10,1    	;	inc r10
+              ld.bu r17,r2,r10  	;	2bit cmprd->r17
+              mulu r17,r17,256  	;	r17*256->r17
+              addu r16,r16,r17		;	r16+r17->r17
+              addu r10,r10,1      	;	inc r10
+              ld.bu r18,r2,r10   	;	M->r18
+              mulu r18,r18,8    	;	r18*8->r18(8*M)
+              addu r10,r10,1      	;	inc r10
+			  
+              ld.bu r17,r2,r10   	;	long r17 <-dist hasta caracteres
+              addu r10,r10,1      	;	inc r10   
+              ld.bu r19,r2,r10   	;	2 car->r19
+              mulu r19,r19,256  	;	r19*256->r19
+              addu r17,r17,r19  	;	r17+r19>r17
+              addu r10,r17,0     	;	r17->r10 ini car
+			  
+descmprdM:	  ld.bu r15,r2,r10   	;	r15 cargar car
+              st.b r15,r3,r11    	;	r15->r3+r11
+              INC2(r10,r11)			;	inc 
+
+              cmp r5,r18,r11    	;	(r12 == 8*M)?si|no
+              or r19,r0,1     		;	reset r19 a 1
+              bb1 eq,r5,bucdescmprd ;	si son iguales descomprime
+              br descmprdM         	;	sino vuelve
+
+bucdescmprd:  cmp r5,r25,31      	;	(r25==31)?si|no
+              or r19,r0,2     		;	reset r19 a 2
+              bb0 eq,r5,sigbit   	;	si es igual a 31 salta 
+              ld.bu r12,r2,r24   	;	r2+r24->r12
+              addu r24,r24,1      	;	inc r24
+              or r25,r0,39     		;	reset r25 a 39
+
+sigbit:       extu r13,r12,r25   	;	extrae 1 bit desp 7 del mapa
+              subu r25,r25,1      	;	dec r25
+              cmp r5,r13,0      	;	compara si el bit del mapa es 0
+              bb1 eq,r5,bites0    	;	si lo es salta a bit 0
+
+bites1:		  ld.bu r14,r2,r10   	;	posicion
+              addu r10,r10,1      	;	inc r10
+              ld.bu r17,r2,r10   	;	r1+r10->r17 (sig car)
+              mulu r17,r17,256  	;	r17*256->r17
+              addu r14,r14,r17  	;	r14+r17->r14
+              addu r10,r10,1      	;	inc r10
+              ld.bu r21,r2,r10   	;	r2+r10->r21(longitud cadena)
+              addu r10,r10,1      	;	inc r10
+              addu r21,r21,r14  	;	r21+r14->r21(fin cadena)  
+
+
+bucbites1:	  ld.bu r15,r3,r14  	;	r15->r3+r14
+              st.b r15,r3,r11    	;	r15->r3+r11
+              INC2(r11,r14)     	;	inc
+              cmp r5,r14,r21    	;	(r14==r21)?si|no
+              bb0 eq,r5,bucbites1 	;	si no es igual vuelve
+              br findescmprd   		;	si es igual mira si es el final
+
+
+bites0:		  ld.bu r15,r2,r10   	;	r15->r2+r10
+              st.b r15,r3,r11    	;	r15->r3+r11
+              INC2(r10,r11)			;	inc
+
+
+findescmprd: cmp r5,r11,r16      	;	(r11==r16)?si|no
+              or r19,r0,3     		;	reset r19 a 3
+              bb0 eq,r5,bucdescmprd ;	si no es igual vuelve al bucle
+              st.b r0,r3,r11     	;	0->r1+r11
+              addu r29,r11,0     	;	guarda r29
+              finPila()
+              jmp(r1)
+			
+		
+
+Verifica: jmp(r1)
+
+
+;No tocar nada a partir de aqui
+
+;
+; Debe incorporar este fichero con TODAS sus líneas, sin modificar
+; ninguna de ellas, al final de su archivo CDV24.ens
+;
+; Este aviso se refiere también a las líneas de comentario
+; 
+;
+;; Grupo:    210347 - Fri Oct 27 13:08:40 CEST 2023
+
+BuscaMax:
+	PUSH (r1)
+	PUSH (r31)
+	or   r31, r30, 0
+	or   r28, r0, 0x32C1
+	PUSH (r28)
+
+	ld   r10, r31, 8;  REF
+	ld   r11, r31, 12; MAX
+	ld   r12, r31, 16; Dir(JJ)
+
+	sub  r5, r0, 1		; guarda -1 en *JJ por si no se
+	st   r5, r12, 0		; encuentran coincidencias
+
+	addu r27, r0, r0  ; P
+	addu r28, r0, r0  ; L
+
+BucBM:
+	ld.bu r20, r10, r11	; C=REF(max)
+
+				; Reserva registros que
+				; necesita conservar
+	PUSH (r28) 	    	; L
+	PUSH (r11)	    	; MAX
+
+	     		    	; Parámetros de BuscaCar
+	PUSH (r27)	    	; P
+	PUSH (r10)	    	; REF
+	PUSH (r20)	   	; C
+	bsr  BuscaCar
+	POP  (r20)
+	POP  (r10)
+	POP  (r27)
+
+	POP  (r11)		; Recupera registros
+	POP  (r28)	        ; salvaguardados
+
+	cmp  r5, r29, r11	; nuevo P es >= MAX ??
+	bb1  hs, r5, finBM
+	addu r27, r29, r0	; P = nuevo P
+	
+	addu r13, r10, r27	; *REF(P)
+	addu r14, r10, r11 	; *REF(max)	
+
+	PUSH (r11)     		; Reserva registros que
+	PUSH (r10)		; necesita conservar
+	PUSH (r28)
+	PUSH (r27)
+	
+	PUSH (r14)		; Parámetros de CoincidenCad
+	PUSH (r13)
+	bsr  CoincidenCad
+	POP  (r13)
+	POP  (r14)
+	
+	POP  (r27)		; Recupera registros
+	POP  (r28)		; salvaguardados
+	POP  (r10)
+	POP  (r11)
+
+	cmp r5, r29, r28	; Comprueba si longitud > L
+	bb1 le, r5, contBM	; Si no lo es, continúa
+	cmp r5, r29, 255	; Comprueba si longitud > 255
+	bb1 le, r5, noLimBM	; Si no lo es, continúa
+	addu r29, r0, 255	; Si lo es, limita su valor a 255
+	
+noLimBM:
+	addu r28, r29, r0	; actualiza L
+	ld   r12, r31, 16	; Dir(JJ)
+	st   r27, r12, r0	; actualiza P en *JJ
+	bb1 ge, r5, finBM	; Si coincidencia >= 255 termina
+contBM: 
+	addu r27, r27, 1	; Pasa al siguiente carácter
+	cmp  r5, r27, r11	; Es P>=max ?
+	bb1  hs, r5, finBM
+	
+	br   BucBM   		; Nueva búsqueda del primer carácter
+
+finBM:
+	addu r29, r28, r0	; asigna L al valor de retorno r29
+	  
+	or   r27, r0, 0x9B5
+	POP  (r28)
+
+	or   r30, r31, 0
+	POP  (r31)
+	POP  (r1)
+	jmp  (r1)
+;; Grupo:    210347
+
+
+; -----------------------------------PRUEBAS--------------------------------
+
+
+;	PRUEBA1 LONGCAD
+org 0x500
+Plongcad: 
+or r30,r0,0x500
+LEA(r2,textocomprime)
+PUSH (r2)
+ bsr LongCad
+POP(r2)
+stop
+
+;	PRUEBA1 BUSCACAR
+org 0x6000
+Pbuscacar:
+		or r30,r0,0x6000
+		or r28,r0,1
+		or r27,r0,10
+		LOAD(r3,char)
+		LEA(r2,textobuscacar)
+		PUSH(r27)
+		PUSH(r28)
+		PUSH(r2)
+		PUSH(r3)
+		bsr BuscaCar
+		POP(r3)
+		POP(r2)
+		POP(r28)
+		POP(r27)
+		stop
+
+
+;	PRUEBA1 COINCIDENCAD
+
+org 0x1500
+Pcoincidencad:
+		or r30,r0,0x1500
+		LEA(r2,CAD1)
+		LEA(r3,CAD2)
+		PUSH(r3)
+		PUSH(r2)
+		bsr CoincidenCad
+		POP(r2)
+		POP(r3)
+		stop
+
+;	PRUEBA1COMPRIME
+org 0x5000
+Pcomprime:
+		or r30,r0, 0x5000
+		or r31,r30,r0;
+		LEA(r20,textocomprime)
+		LEA(r21,0x200)
+		PUSH(r1)
+		PUSH(r31)
+		PUSH(r21)
+		PUSH(r20)
+		bsr Comprime
+		POP(r20)
+		POP(r21)
+		POP(r31)
+		POP(r1)
+		stop
+
+org 0x7000
+;	PRUEBA2COMPRIME
+Pcomprime2:
+		or r30,r0, 0x7000
+		or r31,r30,r0;
+		LEA(r20,textocomprime2)
+		LEA(r21,0x200)
+		PUSH(r1)
+		PUSH(r31)
+		PUSH(r21)
+		PUSH(r20)
+		bsr Comprime
+		POP(r20)
+		POP(r21)
+		POP(r31)
+		POP(r1)
+		stop
+
+
+;	PRUEBA1DESCOMPRIME
+org 0x4000
+Pdescomprime:
+		or r30,r0,0x4000
+		LEA(r27,textodescomprime)
+		LEA(r28,0x200)
+		PUSH(r1)
+		PUSH(r31)
+		PUSH(r28)
+		PUSH(r27)
+		bsr Descomprime
+		POP(r27)
+		POP(r28)
+		POP(r31)
+		POP(r1)
+		stop
